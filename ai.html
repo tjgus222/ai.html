@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI 스마트 그림판</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons for beautiful UI icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        /* 기본 스크롤바 커스텀 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+        
+        /* 슬라이더(Range) 디자인 커스텀 */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+            width: 100%;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px; width: 16px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 0 2px #1f2937;
+            transition: transform 0.1s;
+        }
+        input[type=range]::-webkit-slider-thumb:active {
+            transform: scale(1.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px;
+            cursor: pointer;
+            background: #4b5563;
+            border-radius: 2px;
+        }
+
+        /* 툴 버튼 활성화 상태 스타일 */
+        .tool-btn.active {
+            background-color: #2563eb !important; /* blue-600 */
+            color: #ffffff !important;
+            box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.4);
+        }
+        
+        /* 컬러 피커 커스텀 */
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border: 2px solid #374151; /* border-gray-700 */
+            border-radius: 0.375rem; /* rounded-md */
+        }
+        
+        /* 캔버스 터치 액션 방지 (그릴 때 화면 스크롤 방지) */
+        canvas {
+            touch-action: none;
+            background-image: linear-gradient(45deg, #f0f0f0 25%, transparent 25%), 
+                              linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), 
+                              linear-gradient(45deg, transparent 75%, #f0f0f0 75%), 
+                              linear-gradient(-45deg, transparent 75%, #f0f0f0 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-gray-200 font-sans h-screen w-full overflow-hidden flex flex-col">
+
+    <div class="md:hidden p-3 bg-gray-900 border-b border-gray-800 flex items-center justify-between shrink-0">
+        <div class="font-bold text-lg flex items-center gap-2">
+            <i data-lucide="palette" class="text-blue-500 w-5 h-5"></i> 스마트 그림판
+        </div>
+        <div class="flex gap-2">
+            <button id="mobileUndoBtn" class="p-2 bg-gray-800 rounded text-gray-300"><i data-lucide="undo" class="w-5 h-5"></i></button>
+            <button id="mobileRedoBtn" class="p-2 bg-gray-800 rounded text-gray-300"><i data-lucide="redo" class="w-5 h-5"></i></button>
+        </div>
+    </div>
+
+    <div class="flex flex-col md:flex-row h-full w-full overflow-hidden">
+        
+        <!-- Left Toolbar (슬림하게 축소된 좌측 도구 모음) -->
+        <div class="w-full md:w-52 lg:w-56 bg-gray-900 border-b md:border-b-0 md:border-r border-gray-800 flex flex-col shrink-0 z-20 transition-all">
+            <!-- Desktop Title -->
+            <div class="hidden md:flex p-4 border-b border-gray-800 text-md lg:text-lg font-bold items-center gap-2">
+                 <i data-lucide="palette" class="text-blue-500 w-5 h-5"></i> AI 스마트 스튜디오
+            </div>
+            
+            <div class="p-3.5 md:p-4 flex-1 overflow-y-auto flex flex-col gap-4 md:gap-5">
+                <!-- 도구 선택 -->
+                <div>
+                    <h3 class="text-[10px] text-gray-500 mb-2.5 uppercase tracking-wider font-bold">도구 모음</h3>
+                    <div class="grid grid-cols-5 md:grid-cols-2 gap-1.5" id="toolBox">
+                        <button class="tool-btn active flex flex-col items-center justify-center p-2.5 rounded-xl bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200 transition" data-tool="brush" title="브러시">
+                            <i data-lucide="pen" class="w-4 h-4 md:mb-1"></i><span class="text-[10px] hidden md:block font-medium mt-0.5">브러시</span>
+                        </button>
+                        <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200 transition" data-tool="highlighter" title="형광펜">
+                            <i data-lucide="highlighter" class="w-4 h-4 md:mb-1"></i><span class="text-[10px] hidden md:block font-medium mt-0.5">형광펜</span>
+                        </button>
+                        <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200 transition" data-tool="fill" title="페인트 통">
+                            <i data-lucide="paint-bucket" class="w-4 h-4 md:mb-1"></i><span class="text-[10px] hidden md:block font-medium mt-0.5">채우기</span>
+                        </button>
+                        <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200 transition" data-tool="eraser" title="지우개">
+                            <i data-lucide="eraser" class="w-4 h-4 md:mb-1"></i><span class="text-[10px] hidden md:block font-medium mt-0.5">지우개</span>
+                        </button>
+                        <button class="tool-btn flex flex-col items-center justify-center p-2.5 rounded-xl bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200 transition" data-tool="eyedropper" title="스포이드 (색상 추출)">
+                            <i data-lucide="pipette" class="w-4 h-4 md:mb-1"></i><span class="text-[10px] hidden md:block font-medium mt-0.5">스포이드</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 색상 및 브러시 설정 -->
+                <div class="flex flex-row md:flex-col gap-4">
+                    <div class="flex-1">
+                        <h3 class="text-[10px] text-gray-500 mb-2 uppercase tracking-wider font-bold">색상</h3>
+                        <input type="color" id="colorPicker" class="w-full h-8 md:h-10 rounded cursor-pointer bg-transparent border-none outline-none" value="#1d4ed8">
+                    </div>
+                    
+                    <div class="flex-[2] md:flex-1 flex flex-col justify-center">
+                        <h3 class="text-[10px] text-gray-500 mb-2 uppercase tracking-wider font-bold flex justify-between">
+                            <span>두께</span> <span id="sizeValue" class="text-blue-400 font-mono">5px</span>
+                        </h3>
+                        <input type="range" id="sizeSlider" min="1" max="100" value="5" class="w-full accent-blue-500">
+                    </div>
+                </div>
+
+                <!-- 캔버스 설정 -->
+                <div class="hidden md:block">
+                    <h3 class="text-[10px] text-gray-500 mb-2 uppercase tracking-wider font-bold">캔버스 설정</h3>
+                    <select id="ratioSelect" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-xs text-gray-200 focus:outline-none focus:border-blue-500 transition shadow-inner">
+                        <option value="16:9">가로 화면 (16:9)</option>
+                        <option value="1:1">정사각형 (1:1)</option>
+                        <option value="9:16">세로 화면 (9:16)</option>
+                    </select>
+                </div>
+                
+                <!-- 하단 액션 버튼들 -->
+                <div class="mt-auto hidden md:flex flex-col gap-2 pt-3 border-t border-gray-800">
+                    <div class="flex gap-1.5">
+                        <button id="desktopUndoBtn" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 p-2 rounded-lg flex justify-center items-center gap-1 text-xs transition font-medium"><i data-lucide="undo-2" class="w-3.5 h-3.5"></i> 취소</button>
+                        <button id="desktopRedoBtn" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 p-2 rounded-lg flex justify-center items-center gap-1 text-xs transition font-medium"><i data-lucide="redo-2" class="w-3.5 h-3.5"></i> 다시</button>
+                    </div>
+                    <button id="clearBtn" class="w-full bg-red-950/40 text-red-400 hover:bg-red-900/60 p-2.5 rounded-lg flex justify-center items-center gap-1.5 text-xs border border-red-900/50 transition font-medium">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 캔버스 비우기
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Canvas Container (여백을 극도로 최소화하여 넓어진 캔버스 영역) -->
+        <div class="flex-1 relative bg-gray-950 flex flex-col shadow-inner overflow-hidden">
+            <div class="flex-1 w-full h-full p-2.5 md:p-4 flex justify-center items-center overflow-hidden" id="canvasContainer">
+                <canvas id="mainCanvas" class="bg-white shadow-2xl rounded-sm cursor-crosshair max-w-full max-h-full object-contain"></canvas>
+            </div>
+        </div>
+
+        <!-- Right AI Wizard Panel (마법사 패널 폭 축소) -->
+        <div class="w-full md:w-64 lg:w-72 bg-gray-900 border-t md:border-t-0 md:border-l border-gray-800 flex flex-col shrink-0 z-20 h-[40vh] md:h-auto overflow-y-auto">
+            <div class="p-4 border-b border-gray-800 font-bold text-md lg:text-lg flex items-center gap-2 sticky top-0 bg-gray-900 z-10 shadow-sm">
+                <div class="p-1 bg-purple-500/20 rounded-md"><i data-lucide="sparkles" class="text-purple-400 w-4.5 h-4.5"></i></div> 
+                AI 마법사
+            </div>
+            
+            <div class="p-3.5 md:p-4 flex flex-col gap-4">
+                <!-- 1단계: 분석 -->
+                <div class="bg-gray-800/80 p-4 rounded-xl border border-gray-700/50 shadow-sm relative overflow-hidden group">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                    <div class="flex items-center gap-2 mb-1.5">
+                        <div class="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-[10px] font-bold shadow-md shadow-blue-500/20">1</div>
+                        <h4 class="text-sm font-bold text-gray-100">그림 인식</h4>
+                    </div>
+                    <p class="text-[11px] text-gray-400 mb-3 ml-7 leading-relaxed">내가 그린 그림이 무엇인지 AI에게 물어보세요.</p>
+                    
+                    <button id="analyzeBtn" class="w-full bg-gray-700 hover:bg-gray-600 border border-gray-600 text-white p-2.5 rounded-lg transition font-medium flex justify-center items-center gap-1.5 text-xs">
+                        <i data-lucide="scan-face" class="w-3.5 h-3.5 text-blue-400"></i> AI 그림 분석하기
+                    </button>
+                    
+                    <div id="analyzeResult" class="mt-3 p-2.5 bg-blue-950/30 rounded-lg text-xs text-gray-300 hidden border border-blue-900/30">
+                        인식 결과: <span id="subjectText" class="font-bold text-blue-400 ml-1 text-sm"></span>
+                    </div>
+                </div>
+
+                <!-- 2단계: 꾸미기 -->
+                <div class="bg-gray-800/80 p-4 rounded-xl border border-gray-700/50 shadow-sm opacity-40 pointer-events-none transition-all duration-500 relative overflow-hidden" id="decorateSection">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-purple-500"></div>
+                    <div class="flex items-center gap-2 mb-1.5">
+                        <div class="w-5 h-5 rounded-full bg-purple-500 text-white flex items-center justify-center text-[10px] font-bold shadow-md shadow-purple-500/20">2</div>
+                        <h4 class="text-sm font-bold text-gray-100">자동 꾸미기</h4>
+                    </div>
+                    <p class="text-[11px] text-gray-400 mb-3 ml-7 leading-relaxed">배경이나 테마를 입력하면 화려하게 바꾸어 드립니다.</p>
+                    
+                    <div class="ml-7">
+                        <label class="text-[10px] text-gray-400 mb-1 block font-medium">테마 입력</label>
+                        <input type="text" id="themeInput" placeholder="예: 별이 빛나는 밤하늘" class="w-full bg-gray-950 border border-gray-700 rounded-lg p-2 text-white mb-3 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 text-xs transition placeholder-gray-600">
+                        
+                        <button id="decorateBtn" class="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white p-2.5 rounded-lg transition font-bold flex justify-center items-center gap-1.5 text-xs shadow-lg shadow-purple-900/30">
+                            <i data-lucide="wand-2" class="w-3.5 h-3.5"></i> 일러스트 변환
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 로딩 표시기 -->
+                <div id="aiLoading" class="hidden flex-col items-center justify-center p-6 text-gray-400 bg-gray-900/50 rounded-xl border border-gray-800">
+                    <div class="relative w-10 h-10 mb-3">
+                        <div class="absolute inset-0 border-4 border-gray-700 rounded-full"></div>
+                        <div class="absolute inset-0 border-4 border-blue-500 rounded-full border-t-transparent animate-spin"></div>
+                    </div>
+                    <span class="text-xs font-semibold text-gray-300" id="aiLoadingText">AI가 분석 중입니다...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 아이콘 초기화
+        lucide.createIcons();
+
+        // 1. 상태 및 주요 변수 선언
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        
+        const state = {
+            tool: 'brush', // brush, highlighter, fill, eraser, eyedropper
+            color: '#1d4ed8',
+            size: 5,
+            ratio: '16:9',
+            isDrawing: false,
+            history: [],
+            historyStep: -1,
+            aiSubject: '', // AI가 인식한 피사체 저장
+            lastPos: { x: 0, y: 0 }
+        };
+
+        // UI 요소 캐싱
+        const colorPicker = document.getElementById('colorPicker');
+        const sizeSlider = document.getElementById('sizeSlider');
+        const sizeValue = document.getElementById('sizeValue');
+        const ratioSelect = document.getElementById('ratioSelect');
+        const toolBtns = document.querySelectorAll('.tool-btn');
+
+        // 캔버스 크기 및 비율 초기화 함수
+        function initCanvas(ratioType) {
+            let width, height;
+            // 고해상도 처리를 위해 캔버스 내부 해상도를 넉넉하게 설정
+            if (ratioType === '16:9') { width = 1280; height = 720; }
+            else if (ratioType === '1:1') { width = 900; height = 900; }
+            else if (ratioType === '9:16') { width = 720; height = 1280; }
+
+            canvas.width = width;
+            canvas.height = height;
+
+            // 캔버스를 하얀색으로 칠하기 (배경 투명도 방지)
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+
+            // 캔버스 비율 변경 시 히스토리 초기화 후 저장
+            state.history = [];
+            state.historyStep = -1;
+            saveHistory();
+        }
+
+        // 마우스/터치 좌표를 캔버스 내부 해상도 좌표로 변환
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            // css 크기와 실제 캔버스 내부 해상도의 비율 계산
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+
+            // 터치 이벤트 대응
+            let clientX = e.clientX;
+            let clientY = e.clientY;
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            }
+
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+
+        // 커스텀 알럿 메시지 (alert() 대체)
+        function alertCustom(message, type = 'info') {
+            const modal = document.createElement('div');
+            modal.className = 'fixed inset-0 bg-black/70 flex items-center justify-center z-[100] px-4 backdrop-blur-sm opacity-0 transition-opacity duration-300';
+            
+            const colorClass = type === 'error' ? 'text-red-400 bg-red-500/10 border-red-500/30' : 'text-blue-400 bg-blue-500/10 border-blue-500/30';
+            const icon = type === 'error' ? '<i data-lucide="alert-circle" class="w-6 h-6"></i>' : '<i data-lucide="info" class="w-6 h-6"></i>';
+            
+            modal.innerHTML = `
+                <div class="bg-gray-900 p-6 rounded-2xl shadow-2xl max-w-sm w-full border border-gray-700 transform scale-95 transition-transform duration-300" id="modalContent">
+                    <div class="flex flex-col items-center text-center">
+                        <div class="p-3 rounded-full mb-4 ${colorClass}">
+                            ${icon}
+                        </div>
+                        <p class="text-gray-200 mb-6 font-medium leading-relaxed">${message}</p>
+                        <button class="w-full bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-xl transition font-bold" onclick="closeCustomAlert(this)">확인</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            lucide.createIcons(); // 동적 아이콘 렌더링
+            
+            // 애니메이션 등장
+            requestAnimationFrame(() => {
+                modal.classList.remove('opacity-0');
+                document.getElementById('modalContent').classList.remove('scale-95');
+            });
+        }
+        
+        window.closeCustomAlert = function(btn) {
+            const modal = btn.closest('.fixed');
+            modal.classList.add('opacity-0');
+            modal.querySelector('div').classList.add('scale-95');
+            setTimeout(() => modal.remove(), 300);
+        }
+
+        function saveHistory() {
+            // 현재 스텝 이후의 미래 히스토리는 삭제 (새로운 액션이 발생했으므로)
+            if (state.historyStep < state.history.length - 1) {
+                state.history = state.history.slice(0, state.historyStep + 1);
+            }
+            // 캔버스 상태 저장
+            state.history.push(canvas.toDataURL('image/png'));
+            state.historyStep++;
+            
+            // 메모리 관리를 위해 히스토리 제한 (예: 20단계)
+            if(state.history.length > 20) {
+                state.history.shift();
+                state.historyStep--;
+            }
+        }
+
+        function restoreHistory(step) {
+            if (step >= 0 && step < state.history.length) {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                };
+                img.src = state.history[step];
+                state.historyStep = step;
+            }
+        }
+
+        function undo() {
+            if (state.historyStep > 0) restoreHistory(state.historyStep - 1);
+        }
+
+        function redo() {
+            if (state.historyStep < state.history.length - 1) restoreHistory(state.historyStep + 1);
+        }
+
+        // 버튼 이벤트 바인딩
+        document.getElementById('desktopUndoBtn').addEventListener('click', undo);
+        document.getElementById('desktopRedoBtn').addEventListener('click', redo);
+        document.getElementById('mobileUndoBtn').addEventListener('click', undo);
+        document.getElementById('mobileRedoBtn').addEventListener('click', redo);
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            initCanvas(state.ratio);
+        });
+
+        // 색상 비교 헬퍼 함수
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16), a: 255 } : null;
+        }
+
+        // 최적화된 Scanline Flood Fill 알고리즘
+        function floodFill(startX, startY, targetR, targetG, targetB, fillHex) {
+            const fillRgb = hexToRgb(fillHex);
+            if (!fillRgb) return;
+            const { r: fillR, g: fillG, b: fillB, a: fillA } = fillRgb;
+            
+            // 캔버스 이미지 데이터 가져오기
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // 클릭한 곳과 채울 색상이 같으면 무시 (안티앨리어싱 허용 오차 감안)
+            if (Math.abs(targetR - fillR) < 5 && Math.abs(targetG - fillG) < 5 && Math.abs(targetB - fillB) < 5) return;
+
+            const stack = [[startX, startY]];
+            
+            // 오차 범위 (안티앨리어싱 경계를 부드럽게 채우기 위함)
+            const tolerance = 40; 
+            
+            function matchStartColor(idx) {
+                return Math.abs(data[idx] - targetR) <= tolerance &&
+                       Math.abs(data[idx+1] - targetG) <= tolerance &&
+                       Math.abs(data[idx+2] - targetB) <= tolerance;
+            }
+
+            function colorPixel(idx) {
+                data[idx] = fillR;
+                data[idx+1] = fillG;
+                data[idx+2] = fillB;
+                data[idx+3] = fillA;
+            }
+
+            // BFS 스타일 스캔라인 채우기
+            while (stack.length > 0) {
+                let [x, y] = stack.pop();
+                let currentIdx = (y * w + x) * 4;
+
+                // 위로 이동하며 타겟 색상 찾기
+                while (y >= 0 && matchStartColor(currentIdx)) {
+                    y--;
+                    currentIdx -= w * 4;
+                }
+                
+                // 보정
+                currentIdx += w * 4;
+                y++;
+
+                let reachLeft = false;
+                let reachRight = false;
+
+                // 아래로 이동하며 색상 칠하고 좌우 검사
+                while (y < h && matchStartColor(currentIdx)) {
+                    colorPixel(currentIdx);
+
+                    if (x > 0) {
+                        if (matchStartColor(currentIdx - 4)) {
+                            if (!reachLeft) {
+                                stack.push([x - 1, y]);
+                                reachLeft = true;
+                            }
+                        } else if (reachLeft) {
+                            reachLeft = false;
+                        }
+                    }
+
+                    if (x < w - 1) {
+                        if (matchStartColor(currentIdx + 4)) {
+                            if (!reachRight) {
+                                stack.push([x + 1, y]);
+                                reachRight = true;
+                            }
+                        } else if (reachRight) {
+                            reachRight = false;
+                        }
+                    }
+                    
+                    currentIdx += w * 4;
+                    y++;
+                }
+            }
+            
+            // 데이터 캔버스에 적용
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function rgbToHex(r, g, b) {
+            return "#" + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1);
+        }
+
+        function extractColor(e) {
+            const pos = getPos(e);
+            const pixelData = ctx.getImageData(pos.x, pos.y, 1, 1).data;
+            const hex = rgbToHex(pixelData[0], pixelData[1], pixelData[2]);
+            
+            state.color = hex;
+            colorPicker.value = hex;
+            
+            // 색상 추출 후 다시 브러시로 자동 전환
+            setTool('brush');
+        }
+
+        function updateToolUI() {
+            toolBtns.forEach(btn => {
+                if(btn.dataset.tool === state.tool) {
+                    btn.classList.add('active', 'bg-blue-600', 'text-white');
+                    btn.classList.remove('bg-gray-800', 'text-gray-400');
+                } else {
+                    btn.classList.remove('active', 'bg-blue-600', 'text-white');
+                    btn.classList.add('bg-gray-800', 'text-gray-400');
+                }
+            });
+        }
+
+        function setTool(toolName) {
+            state.tool = toolName;
+            updateToolUI();
+        }
+
+        toolBtns.forEach(btn => {
+            btn.addEventListener('click', () => setTool(btn.dataset.tool));
+        });
+
+        colorPicker.addEventListener('input', (e) => state.color = e.target.value);
+        
+        sizeSlider.addEventListener('input', (e) => {
+            state.size = e.target.value;
+            sizeValue.innerText = state.size + 'px';
+        });
+
+        ratioSelect.addEventListener('change', (e) => {
+            state.ratio = e.target.value;
+            initCanvas(state.ratio);
+        });
+
+        function applyContextSettings() {
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            if (state.tool === 'highlighter') {
+                ctx.lineWidth = state.size * 1.5; // 형광펜은 조금 더 두껍게
+                ctx.strokeStyle = state.color;
+                ctx.globalAlpha = 0.3; // 반투명
+                ctx.globalCompositeOperation = 'source-over'; 
+            } else if (state.tool === 'eraser') {
+                ctx.lineWidth = state.size;
+                ctx.strokeStyle = '#ffffff'; // 지우개는 배경색(하얀색)으로 덮기
+                ctx.globalAlpha = 1.0;
+                ctx.globalCompositeOperation = 'source-over';
+            } else {
+                // 일반 브러시
+                ctx.lineWidth = state.size;
+                ctx.strokeStyle = state.color;
+                ctx.globalAlpha = 1.0;
+                ctx.globalCompositeOperation = 'source-over';
+            }
+        }
+
+        function startDrawing(e) {
+            if (state.tool === 'fill') {
+                const pos = getPos(e);
+                const pixelData = ctx.getImageData(pos.x, pos.y, 1, 1).data;
+                floodFill(Math.floor(pos.x), Math.floor(pos.y), pixelData[0], pixelData[1], pixelData[2], state.color);
+                saveHistory();
+                return;
+            }
+            if (state.tool === 'eyedropper') {
+                extractColor(e);
+                return;
+            }
+
+            state.isDrawing = true;
+            const pos = getPos(e);
+            state.lastPos = pos;
+            
+            applyContextSettings();
+            
+            // 점 하나만 찍을 때를 위한 처리
+            ctx.beginPath();
+            ctx.arc(pos.x, pos.y, ctx.lineWidth / 2, 0, Math.PI * 2);
+            ctx.fillStyle = ctx.strokeStyle;
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+        }
+
+        function draw(e) {
+            if (!state.isDrawing) return;
+            e.preventDefault(); // 스크롤 방지
+            
+            const pos = getPos(e);
+            
+            // 부드러운 선 그리기를 위한 Quadratic Curve 활용
+            ctx.quadraticCurveTo(state.lastPos.x, state.lastPos.y, (state.lastPos.x + pos.x)/2, (state.lastPos.y + pos.y)/2);
+            ctx.stroke();
+            
+            state.lastPos = pos;
+        }
+
+        function stopDrawing() {
+            if (state.isDrawing) {
+                // 남은 경로 마무리
+                ctx.lineTo(state.lastPos.x, state.lastPos.y);
+                ctx.stroke();
+                
+                state.isDrawing = false;
+                ctx.beginPath();
+                ctx.globalAlpha = 1.0; // 투명도 초기화
+                saveHistory();
+            }
+        }
+
+        // Pointer Events (마우스 & 터치 통합 처리)
+        canvas.addEventListener('pointerdown', startDrawing);
+        canvas.addEventListener('pointermove', draw);
+        canvas.addEventListener('pointerup', stopDrawing);
+        canvas.addEventListener('pointerout', stopDrawing);
+        canvas.addEventListener('pointercancel', stopDrawing);
+
+
+        // 안전한 API 호출을 위한 재시도 로직
+        async function fetchWithRetry(url, payload, retries = 3) {
+            const delay = 1000;
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!res.ok) {
+                        if (res.status === 429) {
+                            console.warn("API Rate limit, retrying...");
+                            await new Promise(r => setTimeout(r, delay * Math.pow(2, i)));
+                            continue;
+                        }
+                        throw new Error(`HTTP Error: ${res.status}`);
+                    }
+                    return res;
+                } catch (err) {
+                    if (i === retries - 1) throw err;
+                    await new Promise(r => setTimeout(r, delay * Math.pow(2, i)));
+                }
+            }
+        }
+
+        // 1. 이미지 분석 (gemini-3-flash-preview)
+        async function analyzeCanvasImage() {
+            const base64Data = canvas.toDataURL('image/png').split(',')[1];
+            
+            const payload = {
+                contents: [{
+                    role: "user",
+                    parts: [
+                        { text: "이 그림은 무엇을 그린 것인가요? 그림의 핵심 피사체를 1~2개의 명사 단어로 아주 짧게 대답해주세요. 예: '강아지', '자동차', '우주선'" },
+                        { inlineData: { mimeType: "image/png", data: base64Data } }
+                    ]
+                }]
+            };
+            
+            // API Key는 Canvas 환경에서 자동 주입되므로 빈 문자열 유지
+            const apiKey = ""; 
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+            
+            try {
+                const response = await fetchWithRetry(url, payload);
+                const result = await response.json();
+                if (result.candidates && result.candidates.length > 0) {
+                    return result.candidates[0].content.parts[0].text.trim();
+                } else {
+                    throw new Error("분석 결과 구조 오류");
+                }
+            } catch(e) {
+                console.error(e);
+                return null;
+            }
+        }
+
+        // 2. 테마 자동 꾸미기 (gemini-3.1-flash-image-preview)
+        async function decorateCanvasImage(subject, theme) {
+            const base64Data = canvas.toDataURL('image/png').split(',')[1];
+            
+            const payload = {
+                contents: [{
+                    role: "user",
+                    parts: [
+                        { text: `이 그림은 사용자가 그린 '${subject}' 스케치입니다. 원본 그림의 피사체 형태와 특징을 자연스럽게 살리면서, '${theme}' 분위기나 테마에 완벽하게 어우러지는 고품질의 일러스트로 변환해주세요.` },
+                        { inlineData: { mimeType: "image/png", data: base64Data } }
+                    ]
+                }],
+                generationConfig: {
+                    responseModalities: ['IMAGE'],
+                    imageConfig: { aspectRatio: state.ratio } // 현재 캔버스 비율 유지
+                }
+            };
+            
+            const apiKey = "";
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key=${apiKey}`;
+            
+            try {
+                const response = await fetchWithRetry(url, payload);
+                const result = await response.json();
+                const part = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+                if (part) {
+                    return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                } else {
+                    throw new Error("이미지 데이터가 없습니다.");
+                }
+            } catch(e) {
+                console.error(e);
+                return null;
+            }
+        }
+
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const decorateBtn = document.getElementById('decorateBtn');
+        const aiLoading = document.getElementById('aiLoading');
+        const aiLoadingText = document.getElementById('aiLoadingText');
+        const decorateSection = document.getElementById('decorateSection');
+        const analyzeResult = document.getElementById('analyzeResult');
+        const subjectText = document.getElementById('subjectText');
+        const themeInput = document.getElementById('themeInput');
+
+        analyzeBtn.addEventListener('click', async () => {
+            // 빈 캔버스 방지 로직 (단순 구현 - 히스토리가 0이면 빈것으로 간주)
+            if(state.historyStep === 0 && state.history.length === 1) {
+                // 초기 상태일 수 있음
+                alertCustom("먼저 캔버스에 그림을 그려주세요!", "error");
+                return;
+            }
+
+            aiLoading.classList.remove('hidden');
+            analyzeBtn.disabled = true;
+            aiLoadingText.innerText = "AI가 캔버스를 분석하고 있습니다...";
+            
+            const subject = await analyzeCanvasImage();
+            
+            aiLoading.classList.add('hidden');
+            analyzeBtn.disabled = false;
+            
+            if (subject) {
+                state.aiSubject = subject;
+                analyzeResult.classList.remove('hidden');
+                subjectText.innerText = subject;
+                
+                // 꾸미기 섹션 활성화
+                decorateSection.classList.remove('opacity-40', 'pointer-events-none');
+                
+                // 자연스러운 스크롤 이동
+                decorateSection.scrollIntoView({ behavior: 'smooth' });
+            } else {
+                alertCustom("그림 분석에 실패했습니다. 선을 더 분명하게 그리거나 다시 시도해주세요.", "error");
+            }
+        });
+
+        decorateBtn.addEventListener('click', async () => {
+            const theme = themeInput.value.trim();
+            if (!theme) {
+                alertCustom("원하시는 테마를 텍스트로 입력해주세요! (예: 노을지는 바다, 사이버펑크)", "error");
+                themeInput.focus();
+                return;
+            }
+            
+            aiLoading.classList.remove('hidden');
+            decorateBtn.disabled = true;
+            aiLoadingText.innerText = `AI가 '${theme}' 테마로 마법을 부리는 중...`;
+            
+            const resultImageUrl = await decorateCanvasImage(state.aiSubject, theme);
+            
+            aiLoading.classList.add('hidden');
+            decorateBtn.disabled = false;
+            
+            if (resultImageUrl) {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    saveHistory();
+                    
+                    // 성공 피드백
+                    alertCustom("✨ AI 자동 꾸미기가 완료되었습니다!");
+                };
+                img.src = resultImageUrl;
+            } else {
+                alertCustom("일러스트 생성에 실패했습니다. 일시적인 오류일 수 있으니 다시 시도해주세요.", "error");
+            }
+        });
+
+        // 엔터키 지원
+        themeInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                decorateBtn.click();
+            }
+        });
+
+        // 초기 실행
+        window.onload = () => {
+            initCanvas(state.ratio);
+        };
+
+    </script>
+</body>
+</html>
